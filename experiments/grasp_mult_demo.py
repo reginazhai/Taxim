@@ -15,7 +15,7 @@ import pybullet_data
 
 import taxim_robot
 import utils
-from robot_ur import Robot
+from robot import Robot
 from setup import getObjInfo
 
 from collections import defaultdict
@@ -30,8 +30,8 @@ logging.basicConfig(filename="logs/data_collect/logs_{}.log".format(current_time
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", '--start', default=0, type=int, help="start of id in log")
 parser.add_argument('-dxy', action='store_true', help='whether use dxy')
-parser.add_argument("-obj", nargs='?', default='TomatoSoupCan',
-                    help="Name of Object to be tested, supported_objects_list = [TomatoSoupCan, RubiksCube, MustardBottle, 019_pitcher_base]")
+#parser.add_argument("-obj", nargs='?', default='TomatoSoupCan',
+#                    help="Name of Object to be tested, supported_objects_list = [TomatoSoupCan, RubiksCube, MustardBottle, 019_pitcher_base]")
 parser.add_argument('-data_path', nargs='?', default='data/grasp3', help='Data Path.')
 parser.add_argument('-gui', action='store_true', help='whether use GUI')
 args = parser.parse_args()
@@ -51,8 +51,9 @@ def _align_image(img1, img2):
     new_img[:img2.shape[0], img_size[1]:img_size[1] + img2.shape[1], :] = (img1[..., :3])[..., ::-1]
     return new_img
 
+## Forces used to grasp the object
 force_range_list = {
-    "TomatoSoupCan": [8],
+    "TomatoSoupCan": [15],
     "RubiksCube": [10],
     "MustardBottle": [10],
     ## newly added
@@ -60,8 +61,6 @@ force_range_list = {
     "022_windex_bottle": [10],
     "027_skillet": [10],
     "058_golf_ball": [2],
-    '1':[5],
-    '80':[10],
 }
 
 
@@ -75,9 +74,10 @@ height_range_list = {
     #"035_power_drill":utils.heightReal2Sim(np.array([147])),
     "058_golf_ball": utils.heightReal2Sim(np.array([35])),
     "072_toy_airplane": utils.heightReal2Sim(np.array([45])),
-    '1':utils.heightReal2Sim(np.array([3])),
-    '80':utils.heightReal2Sim(np.array([50])),
 }
+
+cur_obj = "RubiksCube"
+env_objs = ["MustardBottle"]
 
 if args.dxy:
     dx_range_list = defaultdict(lambda: np.linspace(-0.005, 0.005, 5).tolist())
@@ -88,12 +88,11 @@ else:
 if __name__ == "__main__":
     log = utils.Log(args.data_path, args.start)
 
-    save_dir = os.path.join('data', 'seq', args.obj)
+    save_dir = os.path.join('data', 'seq', cur_obj)
     os.makedirs(save_dir, exist_ok=True)
 
     # Initialize World
     logging.info("Initializing world")
-    args.gui = False
     if args.gui:
         physicsClient = pb.connect(pb.GUI)
     else:
@@ -113,6 +112,7 @@ if __name__ == "__main__":
     robotID = pb.loadURDF(robotURDF, useFixedBase=True)
     rob = Robot(robotID)
 
+    ## Can change camera position
     cam = utils.Camera(pb, [640, 480])
     rob.go(rob.pos, wait=True)
 
@@ -122,7 +122,22 @@ if __name__ == "__main__":
     nbJoint = pb.getNumJoints(robotID)
 
     # Add object to pybullet and tacto simulator
-    urdfObj, obj_mass, obj_height, force_range, deformation, _ = getObjInfo(args.obj)
+
+    for j in range(len(env_objs)):
+        env_obj = env_objs[j]
+        ## Get object mass, height, (lateral friction) from model.urdf
+        ## Get mesh from .obj or .stl
+        ## Predefined force_range & deformation
+        urdfObj, obj_mass, obj_height, force_range, deformation, _ = getObjInfo(env_obj)
+        objStartPos = [0.5 - (1+j)*0.10, 0, obj_height / 2 + 0.01]
+        ## Input: The X,Y,Z Euler angles are in radians, accumulating 3 rotations expressing the roll around the X, pitch around Y and yaw around the Z axis.
+        ## Output: Quaternion, vec4 list of 4 floating point values [X,Y,Z,W]
+        objStartOrientation = pb.getQuaternionFromEuler([0, 0, np.pi / 2])
+        print(urdfObj)
+        env_objID = pb.loadURDF(urdfObj, objStartPos, objStartOrientation)
+        gelsight.add_object(urdfObj, env_objID, force_range=force_range, deformation=deformation)
+
+    urdfObj, obj_mass, obj_height, force_range, deformation, _ = getObjInfo(cur_obj)
     finger_height = 0.17
     ori = [0, np.pi / 2, 0]
     heigth_before_grasp = max(0.32, obj_height + 0.26)
@@ -131,6 +146,7 @@ if __name__ == "__main__":
     objStartOrientation = pb.getQuaternionFromEuler([0, 0, np.pi / 2])
     print(urdfObj)
     objID = pb.loadURDF(urdfObj, objStartPos, objStartOrientation)
+
     try:
         visual_file = urdfObj.replace("model.urdf", "visual.urdf")
         gelsight.add_object(visual_file, objID, force_range=force_range, deformation=deformation)
@@ -142,10 +158,10 @@ if __name__ == "__main__":
         gelsight.updateGUI(color, depth)
 
     dz = 0.003
-    height_list = height_range_list[args.obj]
-    gripForce_list = force_range_list[args.obj]
-    dx_list = dx_range_list[args.obj]
-    print(f"{args.obj} height: {obj_height}")
+    height_list = height_range_list[cur_obj]
+    gripForce_list = force_range_list[cur_obj]
+    dx_list = dx_range_list[cur_obj]
+    print(f"{cur_obj} height: {obj_height}")
     print(f"height_list: {height_list}")
     print(f"gripForce_list: {gripForce_list}")
     print(f"dx_list: {dx_list}")
@@ -159,8 +175,11 @@ if __name__ == "__main__":
                 config_list.append((height, force, dx))
                 total_data += 1
 
+    ## Resent position and orientation, override all physical simulation
     pb.resetBasePositionAndOrientation(objID, objStartPos, objStartOrientation)
+    ## Get position of the object
     objPosLast, objOriLast, _ = utils.get_object_pose(pb, objID)
+    ## See if object is stable
     while True:
         for _ in range(20):
             pb.stepSimulation()
@@ -172,6 +191,7 @@ if __name__ == "__main__":
     objPos0, objOri0, _ = utils.get_object_pose(pb, objID)
     objStartPos, objStartOrientation = [0.5, 0, objPos0[2]], objOri0
 
+    env_objPos0, env_objOri0, _ = utils.get_object_pose(pb, env_objID)
     print("\n")
 
     start_time = time.time()
@@ -206,7 +226,9 @@ if __name__ == "__main__":
             gripForce = config[1]
             dx = config[2]
 
+            ## Setting the position of object to grasp
             pos = [objPosTrue[0] + x_bias + dx, objPosTrue[1] + y_bias + dy, height_grasp]
+            env_pos = [env_objPos0[0] + x_bias + dx, env_objOri0[1] + y_bias + dy, height_grasp]
             for i in range(10):
                 rob.go([pos[0], pos[1], heigth_before_grasp], ori=ori, width=0.13)
                 pb.stepSimulation()
@@ -228,9 +250,9 @@ if __name__ == "__main__":
             gel_world_pose = []
 
 
-        #elif t <= 50:
-        #    # Rotating
-        #    rob.operate([pos[0], pos[1], heigth_before_grasp], rot=rot, width=0.13)
+        elif t <= 50:
+            # Rotating
+            rob.operate([pos[0], pos[1], heigth_before_grasp], rot=rot, width=0.13)
         elif t <= 100:
             # Dropping
             rob.go(pos, width=0.13)
@@ -271,7 +293,20 @@ if __name__ == "__main__":
 
             if args.gui:
                 gelsight.updateGUI(tactileColor_tmp, depth)
-        elif t > 300:
+        ## Add more steps to poke another object
+        elif t >220 and t <= 300:
+            rob.go([env_pos[0], env_pos[1], heigth_before_grasp], width=0.03)
+            if t == 300:
+                tactileColor_tmp, _ = gelsight.render()
+                visionColor_tmp, _ = cam.get_image()
+                visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
+        elif t > 300 and t <= 400:
+            rob.go([env_pos[0], env_pos[1], heigth_before_grasp], width=0.03)
+            if t == 400:
+                tactileColor_tmp, _ = gelsight.render()
+                visionColor_tmp, _ = cam.get_image()
+                visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
+        elif t > 400:
             # Save the data
             tactileColor_tmp, depth = gelsight.render()
             visionColor_tmp, _ = cam.get_image()

@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-s", '--start', default=0, type=int, help="start of id in log")
 parser.add_argument('-dxy', action='store_true', help='whether use dxy')
 parser.add_argument("-obj", nargs='?', default='044_flat_screwdriver',
-                    help="Name of Object to be tested, supported_objects_list = [044_flat_screwdriver, 037_scissors, 033_spatula]")
+                    help="Name of Object to be tested, supported_objects_list = [044_flat_screwdriver, 037_scissors, 033_spatula, 011_banana, 042_adjustable_wrench]")
 parser.add_argument('-data_path', nargs='?', default='data/grasp3', help='Data Path.')
 parser.add_argument('-gui', action='store_true', help='whether use GUI')
 args = parser.parse_args()
@@ -55,13 +55,19 @@ force_range_list = {
     "044_flat_screwdriver": [10],
     "037_scissors": [5],
     "033_spatula":[8],
+    ## newly added
+    "011_banana": [6],
+    "035_power_drill":[20],
+    "038_padlock":[8],
 }
 
 dx_range_list = defaultdict(lambda: np.linspace(-0.015, 0.02, 10).tolist())
 dx_range_list['044_flat_screwdriver'] = np.array([0.05]) + 0.04
 dx_range_list['033_spatula'] = np.array([-0.05]) - 0.02
 dx_range_list['037_scissors'] = np.array([0.03]) + 0.03
-
+dx_range_list["011_banana"] = np.array([0.03]) + 0.03
+dx_range_list["035_power_drill"] = np.array([0.00]) + 0.04
+dx_range_list["038_padlock"] = np.array([0.00]) + 0.02
 
 if __name__ == "__main__":
     log = utils.Log(args.data_path, args.start)
@@ -81,8 +87,7 @@ if __name__ == "__main__":
     # Initialize digits
     gelsight = taxim_robot.Sensor(width=640, height=480, visualize_gui=args.gui)
 
-    pb.resetDebugVisualizerCamera(cameraDistance=0.6, cameraYaw=15, cameraPitch=-15,
-                                  cameraTargetPosition=[0.5, 0, 0.08])
+    pb.resetDebugVisualizerCamera(cameraDistance=0.6, cameraYaw=15, cameraPitch = -15, cameraTargetPosition = [0.5, 0, 0.08])
 
     planeId = pb.loadURDF("plane.urdf")  # Create plane
 
