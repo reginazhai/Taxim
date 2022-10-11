@@ -1,12 +1,6 @@
-# Taxim-Robot: An extension of Taxim simulation model 
+# Taxim-panda: 
 
-[![License: MIT](https://img.shields.io/github/license/facebookresearch/tacto)](LICENSE)
-
-This package is an integrated robot simulation framework with [Taxim](https://github.com/CMURoboTouch/Taxim). We show the application of this framework with grasping demos. It is adapted from Facebook's [tacto](https://github.com/facebookresearch/tacto) repo.
-
-![demo_screwdriver](/media/demo_screwdriver.gif)
-
-![demo_tomatosoupcan](/media/demo_tomatosoupcan.gif)
+This is a modified version of Taxim, which replaces UR robot with Franka robot
 
 
 ## Installation
