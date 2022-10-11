@@ -34,7 +34,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-s", '--start', default=0, type=int, help="start of id in log")
 parser.add_argument('-dxy', action='store_true', help='whether use dxy')
 parser.add_argument('-data_path', nargs='?', default='data/grasp3', help='Data Path.')
-parser.add_argument('-gui', action='store_true', help='whether use GUI')
+parser.add_argument("-obj", nargs='?', default='RubiksCube',
+                    help="Name of Object to be tested, supported_objects_list = [TomatoSoupCan, RubiksCube, MustardBottle, 058_golf_ball]")
+parser.add_argument('-gui', action='store_true', help='whether use GUI') # not available on macOS
 args = parser.parse_args()
 
 
@@ -77,7 +79,7 @@ height_range_list = {
     "072_toy_airplane": utils.heightReal2Sim(np.array([45])),
 }
 
-cur_obj = "058_golf_ball"
+cur_obj = args.obj
 env_objs = ["MustardBottle"]
 
 if args.dxy:
@@ -101,9 +103,8 @@ if __name__ == "__main__":
     pb.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
     pb.setGravity(0, 0, -9.81)  # Major Tom to planet Earth
 
-    #env = SimEnv(pb) # Initialize simulation environment
     # Initialize Panda Robot
-    panda = panda_sim.PandaSimAuto(pb, [0, -0.5, 0])     #offset: [0, -0.5, 0]
+    panda = panda_sim.PandaSim(pb, [0, -0.5, 0])     #offset: [0, -0.5, 0]
     pandaID = panda.panda
     grasp_config = {'x':0, 'y':0, 'z':0.01, 'angle':0, 'width':0.16}
 
@@ -115,7 +116,7 @@ if __name__ == "__main__":
 
     planeId = pb.loadURDF("plane.urdf")  # Create plane
 
-    ## Can change camera position
+    ## Can change camera position in utils.py in Camera settings
     cam = utils.Camera(pb, [640, 480])
     nbJoint = pb.getNumJoints(pandaID)
     print(nbJoint)
@@ -125,11 +126,9 @@ if __name__ == "__main__":
         jointNames[name] = i
     
     sensorLinks =  [jointNames[name] for name in ["guide_joint_finger_left"]]  # Gelsight link
-    print(jointNames)
-    print(sensorLinks)
     gelsight.add_camera(pandaID, sensorLinks)
 
-    # Add object to pybullet and tacto simulator
+    ## TODO: Add multiple objects to the environment
     '''
     for j in range(len(env_objs)):
         env_obj = env_objs[j]
@@ -147,7 +146,7 @@ if __name__ == "__main__":
     '''
     urdfObj, obj_mass, obj_height, force_range, deformation, _ = getObjInfo(cur_obj)
     finger_height = 0.17
-    ori = [0, np.pi / 2, 0]
+    ori = [math.pi,0., math.pi / 2] #[0, np.pi / 2, 0]
     heigth_before_grasp = max(0.32, obj_height + 0.26)
 
     objStartPos = [0.5, 0, 0.0]
@@ -226,23 +225,18 @@ if __name__ == "__main__":
                 objPosLast, objOriLast = objPosTrue, objOriTrue
 
             rot = -1.57
-            bias_lth = 0.012
-            x_bias = bias_lth * np.cos([rot])[0]
-            y_bias = bias_lth * np.sin([rot])[0]
-            dx = dy = 0
             config = config_list[num_data]
             height_grasp = config[0]
             gripForce = config[1]
             dx = config[2]
+            dy = 0
 
             ## Setting the position of object to grasp
             pos = [objPosTrue[0], objPosTrue[1], height_grasp]
-            print(pos)
-            pos = [objPosTrue[0], objPosTrue[1] + y_bias + dy, height_grasp]
-            print(pos)
+
+            ## For multiple objects, modify the following env_pos to have more position of objects
             #env_pos = [env_objPos0[0], env_objOri0[1], height_grasp*0.6]
             for i in range(10):
-                #rob.go([pos[0], pos[1], heigth_before_grasp], ori=ori, width=0.13)
                 pb.stepSimulation()
             visualize_data = []
             tactileColor_tmp, _ = gelsight.render()
@@ -260,94 +254,73 @@ if __name__ == "__main__":
 
             obj_world_pose = []
             gel_world_pose = []
-            #status, actions = panda.step_grasping([pos[0], pos[1], pos[2]+0.03], grasp_config['angle'], (grasp_config['width'])/2)
 
             
         elif t <= 50:
             # Rotating
-            orn = pb.getQuaternionFromEuler([math.pi,0., math.pi / 2])
-            ## Calculate the location that the end effector should be
-            joint_poses = panda.calcJointLocation([pos[0], pos[1], height_grasp + 0.26], orn)
-            panda.setArm(joint_poses)
-            panda.setGripper(0.40)
+            panda.go([pos[0], pos[1], height_grasp + 0.26], ori=ori, width=0.60)
             
         elif t <= 100:
             # Dropping
-            joint_poses = panda.calcJointLocation([pos[0], pos[1], height_grasp - 0.12], orn)
-            panda.setArm(joint_poses)
-            panda.setGripper(0.40)
+            #print('---------------')
+            panda.go([pos[0], pos[1], height_grasp - 0.04], width=0.60)
             if t == 100:
                 tactileColor_tmp, _ = gelsight.render()
                 visionColor_tmp, _ = cam.get_image()
                 visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
 
-        elif t < 200:
+        elif t < 150:
             # Grasping
-            joint_poses = panda.calcJointLocation([pos[0], pos[1], height_grasp - 0.12], orn)
-            panda.setArm(joint_poses)
-            panda.setGripper(0.00)
-            '''
-            elif t == 150:
-                joint_poses = panda.calcJointLocation(pos, orn)
-                panda.setArm(joint_poses)
-                panda.setGripper(0.02)
-                # Record sensor states
-                data_dict = {}
-                normalForce0, lateralForce0 = utils.get_forces(pb, pandaID, objID, sensorID[0], -1)
-                tactileColor, tactileDepth = gelsight.render()
-                data_dict["tactileColorL"], data_dict["tactileDepthL"] = tactileColor[0], tactileDepth[0]
-                data_dict["visionColor"], data_dict["visionDepth"] = cam.get_image()
-                normalForce = [normalForce0]
-                data_dict["normalForce"] = normalForce
-                data_dict["height"], data_dict["gripForce"], data_dict["rot"] = utils.heightSim2Real(
-                    pos[-1]), gripForce, rot
-                objPos0, objOri0, _ = utils.get_object_pose(pb, objID)
-                visualize_data.append(_align_image(data_dict["tactileColorL"], data_dict["visionColor"]))
-                if args.gui:
-                    gelsight.updateGUI(tactileColor, tactileDepth)
-                pos_copy = pos.copy()
-            '''
-            '''            
-            elif t > 150 and t < 210:
-                # Lift
-                pos_copy = pos.copy()
-                pos_copy[-1] += dz
-                joint_poses = panda.calcJointLocation(pos_copy, ori)
-                panda.setArm(joint_poses)
-                panda.setGripper(0.00)'''
-            '''
-            elif t == 210:
-                pos_copy[-1] += dz
-                joint_poses = panda.calcJointLocation(pos_copy, ori)
-                panda.setArm(joint_poses)
-                panda.setGripper(0.00)
-                tactileColor_tmp, depth = gelsight.render()
-                visionColor_tmp, _ = cam.get_image()
-                visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
-
-                if args.gui:
-                    gelsight.updateGUI(tactileColor_tmp, depth)
+            #print('---------------')
+            panda.go([pos[0], pos[1], height_grasp - 0.04], width=0.00)
             
+        elif t == 150:
+            panda.go([pos[0], pos[1], height_grasp - 0.04], width=0.00)
+            # Record sensor states
+            data_dict = {}
+            normalForce0, lateralForce0 = utils.get_forces(pb, pandaID, objID, sensorID[0], -1)
+            tactileColor, tactileDepth = gelsight.render()
+            data_dict["tactileColorL"], data_dict["tactileDepthL"] = tactileColor[0], tactileDepth[0]
+            data_dict["visionColor"], data_dict["visionDepth"] = cam.get_image()
+            normalForce = [normalForce0]
+            data_dict["normalForce"] = normalForce
+            data_dict["height"], data_dict["gripForce"], data_dict["rot"] = utils.heightSim2Real(
+                pos[-1]), gripForce, rot
+            objPos0, objOri0, _ = utils.get_object_pose(pb, objID)
+            visualize_data.append(_align_image(data_dict["tactileColorL"], data_dict["visionColor"]))
+            if args.gui:
+                gelsight.updateGUI(tactileColor, tactileDepth)
+            pos_copy = pos.copy()
+            
+                     
+        elif t > 160 and t < 210:
+            # Lift
+            pos_copy = pos.copy()
+            pos_copy[-1] += dz
+            panda.go([pos[0], pos[1], height_grasp + 0.26], width=0.00)
+            
+        elif t == 210:
+            tactileColor_tmp, depth = gelsight.render()
+            visionColor_tmp, _ = cam.get_image()
+            visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
+
+            '''
             ## Add more steps to poke another object
             elif t >220 and t <= 300:
-                joint_poses = panda.calcJointLocation([env_pos[0], env_pos[1], heigth_before_grasp], orn)
-                panda.setArm(joint_poses)
-                panda.setGripper(0.0)
+                panda.go([env_pos[0], env_pos[1], height_grasp + 0.26], width=0.00)
                 if t == 300:
                     tactileColor_tmp, _ = gelsight.render()
                     visionColor_tmp, _ = cam.get_image()
                     visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
             elif t > 300 and t <= 400:
-                joint_poses = panda.calcJointLocation([env_pos[0], env_pos[1], heigth_before_grasp], orn)
-                panda.setArm(joint_poses)
-                panda.setGripper(0.0)
+                panda.go([env_pos[0], env_pos[1], height_grasp + 0.26], width=0.00)
                 if t == 400:
                     tactileColor_tmp, _ = gelsight.render()
                     visionColor_tmp, _ = cam.get_image()
                     visualize_data.append(_align_image(tactileColor_tmp[0], visionColor_tmp))
             '''
             
-        elif t > 220:
+        elif t > 250:
             # Save the data
             tactileColor_tmp, depth = gelsight.render()
             visionColor_tmp, _ = cam.get_image()
@@ -356,8 +329,8 @@ if __name__ == "__main__":
                 gelsight.updateGUI(tactileColor_tmp, depth)
             objPos, objOri, _ = utils.get_object_pose(pb, objID)
             label = 0 if objPos[2] - objPos0[2] < 60 * dz * 0.8 else 1
-            #data_dict["label"] = label
-            #data_dict["visual"] = visualize_data
+            data_dict["label"] = label
+            data_dict["visual"] = visualize_data
 
             if log.id < 1:
                 gripForce = round(gripForce, 2)
@@ -378,7 +351,7 @@ if __name__ == "__main__":
 
             num_pos += label
             num_data += 1
-            #log.save(data_dict)
+            log.save(data_dict)
             config_str = "h{:.3f}-rot{:.2f}-f{:.1f}-l{}".format(pos[-1], rot, gripForce, label)
             static_str = "{}:{}:{} is taken in total. {} positive samples".format(
                 *convertTime(time.time() - start_time), num_pos)
