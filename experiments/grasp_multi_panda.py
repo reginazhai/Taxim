@@ -15,9 +15,7 @@ import pybullet_data
 
 import taxim_robot
 import utils
-#from robot import Robot
 import panda_sim_test as panda_sim
-from simEnv import SimEnv
 from setup import getObjInfo
 
 from collections import defaultdict
@@ -119,7 +117,6 @@ if __name__ == "__main__":
     ## Can change camera position in utils.py in Camera settings
     cam = utils.Camera(pb, [640, 480])
     nbJoint = pb.getNumJoints(pandaID)
-    print(nbJoint)
     jointNames = {}
     for i in range(nbJoint):
         name = pb.getJointInfo(pandaID, i)[1].decode()
@@ -146,12 +143,11 @@ if __name__ == "__main__":
     '''
     urdfObj, obj_mass, obj_height, force_range, deformation, _ = getObjInfo(cur_obj)
     finger_height = 0.17
-    ori = [math.pi,0., math.pi / 2] #[0, np.pi / 2, 0]
+    ori = [math.pi,0., math.pi / 2] 
     heigth_before_grasp = max(0.32, obj_height + 0.26)
 
     objStartPos = [0.5, 0, 0.0]
     objStartOrientation = pb.getQuaternionFromEuler([0, 0, np.pi / 2])
-    print(urdfObj)
     ## Load into start position
     objID = pb.loadURDF(urdfObj, objStartPos, objStartOrientation)
 

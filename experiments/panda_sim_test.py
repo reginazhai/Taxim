@@ -123,7 +123,6 @@ class PandaSim(object):
         ori_q = pb.getQuaternionFromEuler(ori)
         ## Calculate target position of each joint
         jointPose = self.p.calculateInverseKinematics(self.panda, pandaEndEffectorIndex, pos, ori_q, ll, ul, jr, rp, maxNumIterations=20)
-        print(jointPose)
         jointPose = np.array(jointPose)
 
         ## Set position for each joint
