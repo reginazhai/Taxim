@@ -1,6 +1,6 @@
 # Taxim-panda: 
 
-This is a modified version of Taxim, which replaces UR robot with Franka robot
+This is a modified version of Taxim, which replaces UR5e robot with Franka robot
 
 
 ## Installation
@@ -25,7 +25,7 @@ This package contain several components:
 
 1) A renderer to simulate tactile readings from a GelSight.
 2) A contact model maps normal forces to indentation depths and shear forces to shear displacements.
-2) Mesh models and urdf files for GelSight, UR5e robot, WSG50 gripper and objects.
+2) Mesh models and urdf files for GelSight, UR5e robot, WSG50 gripper, Franka Emika robot and objects.
 3) Examples of grasping.
 
 ## Usage
@@ -33,14 +33,10 @@ This package contain several components:
 ### experiments
 
 ```bash
-python grasp_data_demo.py -obj TomatoSoupCan
+python grasp_multi_panda.py -bj RubiksCube
 ```
 
-```bash
-python grasp_air_demo.py -obj 044_flat_screwdriver
-```
-
-`grasp_data_demo.py` is used to demonstrate grasping on objects that can stand on the table. `grasp_air_demo.py` is used to demonstrate grasping on elongated objects which will be initialized in the air.
+`grasp_multi_panda.py` is used to demonstrate grasping on objects that can stand on the table using. 
 
 ## Operating System
 
